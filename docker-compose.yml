@@ -1,0 +1,21 @@
+version: '3.8'
+services:
+  neo4j:
+    image: neo4j:5.15.0
+    container_name: fraud_neo4j
+    ports:
+      - "7474:7474"  # Web UI 访问端口
+      - "7687:7687"  # Python 代码通信端口 (Bolt 协议)
+    environment:
+      - NEO4J_AUTH=neo4j/password123  # 初始化账号密码
+      # 下面这行是反欺诈的“灵魂”：自动安装 APOC 插件
+      - NEO4J_PLUGINS=["apoc"]
+      # 允许 APOC 导入/导出文件
+      - NEO4J_apoc_export_file_enabled=true
+      - NEO4J_apoc_import_file_enabled=true
+      - NEO4J_apoc_import_file_use__neo4j__config=true
+    volumes:
+      - ./data/neo4j/data:/data
+      - ./data/neo4j/logs:/logs
+      - ./data/neo4j/import:/var/lib/neo4j/import
+      - ./data/neo4j/plugins:/plugins

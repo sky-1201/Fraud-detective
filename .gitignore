@@ -1,0 +1,38 @@
+# --- 环境变量与密钥 (极其重要！) ---
+.env
+.env.test
+.env.example
+# 如果你的 config 文件夹里有存私密信息，也建议排除
+# src/config/local_settings.py
+
+# --- Python 环境与缓存 ---
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+ENV/
+env/
+.conda/
+
+# --- 数据文件 (PaySim 数据量巨大，严禁上传) ---
+data/
+*.csv
+*.xlsx
+*.sql
+*.zip
+
+# --- 日志文件 ---
+*.log
+fraud_detective.log
+
+# --- IDE 编辑器配置 ---
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# --- 操作系统临时文件 ---
+Thumbs.db
+Desktop.ini
+.DS_Store
