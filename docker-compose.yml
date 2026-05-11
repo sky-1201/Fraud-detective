@@ -1,21 +1,62 @@
 version: '3.8'
+
 services:
-  neo4j:
-    image: neo4j:5.15.0
-    container_name: fraud_neo4j
-    ports:
-      - "7474:7474"  # Web UI 访问端口
-      - "7687:7687"  # Python 代码通信端口 (Bolt 协议)
+  # ==========================================
+  # 1. 🔍 MySQL: 负责“雷达扫描”主动出击 (结构化流水)
+  # ==========================================
+  mysql-radar:
+    image: mysql:8.0-debian
+    container_name: fraud_mysql
+    restart: always
     environment:
-      - NEO4J_AUTH=neo4j/password123  # 初始化账号密码
-      # 下面这行是反欺诈的“灵魂”：自动安装 APOC 插件
-      - NEO4J_PLUGINS=["apoc"]
-      # 允许 APOC 导入/导出文件
-      - NEO4J_apoc_export_file_enabled=true
-      - NEO4J_apoc_import_file_enabled=true
-      - NEO4J_apoc_import_file_use__neo4j__config=true
+      # 初始配置：这些需与 .env 中的配置严格对应
+      MYSQL_ROOT_PASSWORD: root_password_123
+      MYSQL_DATABASE: fraud_db
+    ports:
+      - "3307:3306"
     volumes:
-      - ./data/neo4j/data:/data
-      - ./data/neo4j/logs:/logs
-      - ./data/neo4j/import:/var/lib/neo4j/import
-      - ./data/neo4j/plugins:/plugins
+      - mysql_data:/var/lib/mysql
+    networks:
+      - fraud_network
+
+  # ==========================================
+  # 2. 🕸️ Neo4j: 负责“图谱穿透”深度调查 (拓扑关系)
+  # ==========================================
+  neo4j-graph:
+    image: neo4j:5.18.0
+    container_name: fraud_neo4j
+    restart: always
+    ports:
+      - "7474:7474" # HTTP
+      - "7687:7687" # Bolt (核心驱动连接)
+    environment:
+      # 配置账号密码，格式为: 用户名/密码
+      - NEO4J_AUTH=neo4j/password123
+      # 开启 APOC 扩展插件，GraphRAG 必不可少
+      - NEO4J_PLUGINS=["apoc"]
+      # 允许从 APOC 过程导入导出
+      - NEO4J_dbms_security_procedures_unrestricted=apoc.*
+    volumes:
+      - neo4j_data:/data
+      - neo4j_logs:/logs
+      - neo4j_import:/var/lib/neo4j/import
+      - neo4j_plugins:/plugins
+    networks:
+      - fraud_network
+
+# ==========================================
+# 💾 持久化卷：确保容器重启后数据不会灰飞烟灭
+# ==========================================
+volumes:
+  mysql_data:
+  neo4j_data:
+  neo4j_logs:
+  neo4j_import:
+  neo4j_plugins:
+
+# ==========================================
+# 🌐 网络配置：预留内部通信，增强隔离性
+# ==========================================
+networks:
+  fraud_network:
+    driver: bridge
