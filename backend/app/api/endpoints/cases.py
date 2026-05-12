@@ -3,6 +3,7 @@ from fastapi import APIRouter, HTTPException
 from backend.app.schemas.payload import CaseRequest, CaseResponse
 from backend.app.workflows.graph import compiled_graph
 from backend.app.core.logger import logger
+from backend.app.db.neo4j_db import neo4j_conn
 
 router = APIRouter()
 
@@ -50,3 +51,27 @@ async def investigate_case(request: CaseRequest):
         error_msg = f"专案组执行过程中发生严重故障: {str(e)}"
         logger.error(f"❌ {error_msg}")
         raise HTTPException(status_code=500, detail=error_msg)
+
+
+
+# 💡 注意：你需要引入你的 neo4j 连接对象，请参考你在 graph_tool.py 里的引法
+# 例如: from backend.app.db.neo4j import neo4j_conn
+
+@router.get("/network/{account_id}")
+async def get_suspect_network(account_id: str):
+    """专门为前端关系图谱提供真实拓扑数据的接口"""
+    # 提取嫌疑人关联的上下游一度交易网络
+    cypher_query = """
+    MATCH (n:Client {id: $account_id})-[r:TRANSFERRED_TO]-(m:Client)
+    RETURN 
+        m.id AS partner_id,
+        r.amount AS amount,
+        CASE WHEN startNode(r) = n THEN 'OUTFLOW' ELSE 'INFLOW' END AS direction
+    LIMIT 50
+    """
+    try:
+        # 这里使用你的 neo4j_conn 实例执行查询
+        raw_data = neo4j_conn.execute_query(cypher_query, {"account_id": account_id.strip()})
+        return {"status": "success", "data": raw_data}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
