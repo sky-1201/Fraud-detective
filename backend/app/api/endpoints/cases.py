@@ -54,16 +54,23 @@ async def get_task_status(task_id: str):
         return {"status": task_result.state}
 
 
+# backend/app/api/endpoints/cases.py (最下方接口替换)
+
 @router.get("/network/{account_id}")
 async def get_suspect_network(account_id: str):
-    """专门为前端关系图谱提供真实拓扑数据的接口"""
+    """专门为前端关系图谱提供 N度(深层) 真实拓扑数据的接口"""
+
+    # 🌟 核心魔法：使用 [*1..2] 获取 1 到 2 度的可变长度路径！
+    # 将路径中的关系拆解 (UNWIND) 去重，返回全局的连线列表
     cypher_query = """
-    MATCH (n:Client {id: $account_id})-[r:TRANSFERRED_TO]-(m:Client)
+    MATCH path = (n:Client {id: $account_id})-[*1..2]-(m:Client)
+    UNWIND relationships(path) AS r
+    WITH DISTINCT r
     RETURN 
-        m.id AS partner_id,
-        r.amount AS amount,
-        CASE WHEN startNode(r) = n THEN 'OUTFLOW' ELSE 'INFLOW' END AS direction
-    LIMIT 50
+        startNode(r).id AS source,
+        endNode(r).id AS target,
+        r.amount AS amount
+    LIMIT 150
     """
     try:
         raw_data = neo4j_conn.execute_query(cypher_query, {"account_id": account_id.strip()})

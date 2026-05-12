@@ -31,43 +31,45 @@ class FraudGraphTool:
 
     def investigate(self, account_id: str) -> str:
         """执行图谱侦查并返回结构化情报"""
-        # 强制去除可能存在的不可见空格
         clean_id = account_id.strip()
-        logger.info(f"🕵️‍♂️ 图谱探员出动！正在穿透账户 [{clean_id}] 的关系网...")
+        logger.info(f"🕵️‍♂️ 图谱探员出动！正在进行 N度 深度穿透 [{clean_id}]...")
 
-        # 使用统一的双向查询，并使用 startNode() 动态判断资金流向
+        # 🌟 核心升级：查询 2 度资金链路，将原本的星状结构打平为链路明细
         cypher_query = """
-        MATCH (suspect:Client {id: $account_id})
-        OPTIONAL MATCH (other:Client)-[r:TRANSFERRED_TO]-(suspect)
+        MATCH path = (suspect:Client {id: $account_id})-[*1..2]-(other:Client)
+        UNWIND relationships(path) AS r
+        WITH DISTINCT r
         RETURN 
-            suspect.id AS Target,
-            collect(DISTINCT {
-                partner_id: other.id, 
-                amount: r.amount, 
-                step: r.step, 
-                type: r.type,
-                direction: CASE WHEN startNode(r) = suspect THEN 'OUTFLOW (汇出)' ELSE 'INFLOW (汇入)' END
-            }) AS Transactions
+            startNode(r).id AS source,
+            endNode(r).id AS target,
+            r.amount AS amount,
+            r.step AS step,
+            r.type AS type
+        LIMIT 100
         """
 
         try:
             raw_data = neo4j_conn.execute_query(cypher_query, {"account_id": clean_id})
 
-            # 如果没查到，或者 Transactions 列表里只有 null
-            if not raw_data or not raw_data[0].get('Transactions') or raw_data[0]['Transactions'][0].get(
-                    'partner_id') is None:
+            if not raw_data:
                 return f"图谱侦查结果：未能在图谱中找到账户 {clean_id} 的任何资金流转记录。"
 
+            # 🌟 Prompt 升维：教导 LLM 如何看懂 2 度资金链
             summary_prompt = PromptTemplate.from_template(
                 """你是一名专业的反欺诈资金网络分析师。
-                请根据以下从 Neo4j 图数据库中提取的资金流向 JSON 数据，用 2-3 句话总结该账户的资金特征。
-                重点关注：资金是否呈现“快进快出”、“多进一出（归集）”或“一进多出（分散）”的洗钱特征。
+                请根据以下从 Neo4j 提取的【2度资金链路数据】，总结嫌疑人的洗钱特征。
+                数据格式为多行转账记录：`source(汇款方) -> target(收款方) | amount(金额)`。
+
+                【侦查重点】：
+                1. 链式转移：是否存在 A 打给 B，B 又迅速打给嫌疑人？(资金中转)
+                2. 资金归集：是否出现大量外围边缘节点，将资金汇聚到中间节点，再流入嫌疑人？
+                3. 资金打散：嫌疑人的钱是否又被分发给了大量其他不同节点？
 
                 嫌疑人ID: {account_id}
-                资金网络数据:
+                2度链路数据:
                 {raw_data}
 
-                请直接输出专业的分析结论："""
+                请输出极其专业的分析结论（不超过 4 句话）："""
             )
 
             chain = summary_prompt | self.llm
@@ -76,8 +78,8 @@ class FraudGraphTool:
                 "raw_data": json.dumps(raw_data, ensure_ascii=False)
             })
 
-            logger.info(f"✅ 探员情报获取成功！")
-            return f"【图谱侦查情报】:\n{result.content}\n\n【原始网络数据支持】:\n{json.dumps(raw_data, ensure_ascii=False)}"
+            logger.info(f"✅ N度探员情报获取成功！")
+            return f"【深层图谱侦查情报】:\n{result.content}\n\n【原始链路数据支持】:\n{json.dumps(raw_data, ensure_ascii=False)}"
 
         except Exception as e:
             logger.error(f"❌ 图谱穿透失败: {e}")

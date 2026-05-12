@@ -41,3 +41,4 @@ if __name__ == "__main__":
 # 进入项目根目录后，启动 FastAPI 服务
 # uvicorn backend.app.main:app --reload --host 127.0.0.1 --port 8000
 # streamlit run frontend/app.py
+#celery:celery -A backend.app.worker.tasks.celery_app worker --loglevel=info -P solo
