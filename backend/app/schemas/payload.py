@@ -31,3 +31,9 @@ class CaseResponse(BaseModel):
     risk_level: str
     risk_score: int
     report: str = Field(description="Markdown 格式的最终结案报告")
+
+class TaskResponse(BaseModel):
+    """异步任务排队小票响应"""
+    status: str = "processing"
+    task_id: str = Field(description="Celery 生成的全局唯一任务 ID")
+    account_id: str

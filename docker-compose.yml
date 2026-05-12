@@ -45,6 +45,18 @@ services:
       - fraud_network
 
 # ==========================================
+  # 3. 🚀 Redis: 负责 Celery 异步任务队列的消息中间件
+  # ==========================================
+  redis-broker:
+    image: redis:7-alpine
+    container_name: fraud_redis
+    restart: always
+    ports:
+      - "6379:6379"
+    networks:
+      - fraud_network
+
+# ==========================================
 # 💾 持久化卷：确保容器重启后数据不会灰飞烟灭
 # ==========================================
 volumes:
@@ -53,6 +65,7 @@ volumes:
   neo4j_logs:
   neo4j_import:
   neo4j_plugins:
+
 
 # ==========================================
 # 🌐 网络配置：预留内部通信，增强隔离性

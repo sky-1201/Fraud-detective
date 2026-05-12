@@ -34,6 +34,9 @@ class Settings(BaseSettings):
     LLM_MODEL_ANALYST: str = "qwen-max"  # 复杂推理模型
     LLM_MODEL_ROUTER: str = "qwen-turbo"  # 简单路由模型 (省成本)
 
+    # Redis 连接配置
+    REDIS_URL: str = "redis://localhost:6379/0"
+
     # --- 日志配置 ---
     LOG_LEVEL: str = "INFO"
     LOG_DIR: Path = PROJECT_ROOT / "logs"

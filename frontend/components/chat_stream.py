@@ -7,16 +7,22 @@ from components.network_view import render_money_network
 
 
 def render_investigation_panel():
-    st.header("🕵️‍♂️ 步骤二：AI 专案组联合审讯")
-    st.markdown("调用 LangGraph 探员，穿透 Neo4j 图谱网络并生成定罪报告。")
+    st.header("🕵️‍♂️ 步骤二：AI 专案组联合审讯 (异步集群版)")
+    st.markdown("任务已分发至 Celery 后台集群，通过 Task ID 实时轮询，拒绝页面卡死！")
 
-    # 🌟 初始化专属档案袋，防止刷新丢失
+    # 🌟 1. 初始化所有需要的全局状态
     if 'current_report' not in st.session_state:
         st.session_state.current_report = None
     if 'current_graph' not in st.session_state:
         st.session_state.current_graph = None
     if 'current_suspect' not in st.session_state:
         st.session_state.current_suspect = None
+
+    # 新增：用于记住异步任务的凭证
+    if 'current_task_id' not in st.session_state:
+        st.session_state.current_task_id = None
+    if 'poll_count' not in st.session_state:
+        st.session_state.poll_count = 0
 
     default_id = st.session_state.get('selected_suspect', "")
 
@@ -25,64 +31,93 @@ def render_investigation_panel():
         investigate_btn = st.form_submit_button("🔨 移交专案组发起定罪", use_container_width=True)
 
     # ==========================================
-    # 动作层：只负责请求数据并存入档案袋
+    # 动作层 1：只负责发单，领取小票存入保险箱
     # ==========================================
     if investigate_btn:
         if not account_id:
             st.warning("请先输入需要侦查的嫌疑人 ID！")
             return
 
-        progress_bar = st.progress(0)
-        status_text = st.empty()
-
-        status_text.text("系统立案中...")
-        progress_bar.progress(20)
-        time.sleep(0.5)
-
-        status_text.text("🕵️ 图谱探员正在穿透资金网络...")
-        progress_bar.progress(50)
-
         try:
-            # 1. 获取 AI 案件报告
-            response = requests.post(
+            # 发单前清空旧报告
+            st.session_state.current_report = None
+            st.session_state.current_graph = None
+            st.session_state.poll_count = 0
+
+            res = requests.post(
                 f"{API_BASE_URL}/cases/investigate",
                 json={"account_id": account_id.strip()}
             )
 
-            # 2. 获取 Neo4j 真实网络数据
-            graph_data = []
-            try:
-                graph_res = requests.get(f"{API_BASE_URL}/cases/network/{account_id.strip()}")
-                if graph_res.status_code == 200:
-                    graph_data = graph_res.json().get("data", [])
-            except Exception as e:
-                st.toast(f"图谱数据加载失败: {e}")
-
-            status_text.text("🧠 首席分析师正在生成判决书...")
-            progress_bar.progress(90)
-
-            if response.status_code == 200:
-                result = response.json()
-                # 🌟 关键点：将成功获取的数据存入全局状态！
-                st.session_state.current_report = result
-                st.session_state.current_graph = graph_data
+            if res.status_code == 200:
+                task_data = res.json()
+                # 🚀 核心关键：把 Task ID 存进全局状态，页面怎么刷新都不怕！
+                st.session_state.current_task_id = task_data.get("task_id")
                 st.session_state.current_suspect = account_id.strip()
 
-                progress_bar.progress(100)
-                status_text.empty()
-                progress_bar.empty()
+                # 顺手把图谱数据拉回来
+                try:
+                    graph_res = requests.get(f"{API_BASE_URL}/cases/network/{account_id.strip()}")
+                    if graph_res.status_code == 200:
+                        st.session_state.current_graph = graph_res.json().get("data", [])
+                except:
+                    pass
+
+                # 强制 Streamlit 重新加载页面，进入下方的轮询逻辑
+                st.rerun()
             else:
-                progress_bar.empty()
-                status_text.error(f"专案组执行失败: {response.text}")
-
+                st.error(f"任务分发失败: {res.text}")
         except Exception as e:
-            progress_bar.empty()
-            status_text.error(f"请求失败: {e}")
+            st.error(f"前端网络请求失败: {e}")
 
     # ==========================================
-    # 渲染层：脱离按钮控制，只要档案袋有数据就渲染
+    # 动作层 2：页面重载触发的独立轮询器
     # ==========================================
-    if st.session_state.current_report:
+    # 只要保险箱里有 Task ID，即使你刚点了雷达刷新了页面，它也会继续执行这里！
+    if st.session_state.current_task_id:
+        task_id = st.session_state.current_task_id
+        st.session_state.poll_count += 1
+
+        progress_bar = st.progress(min(10 + st.session_state.poll_count * 2, 95))
+        st.info(f"🎫 凭证: {task_id[:8]}... | 🧠 专案组深度推理中 (第 {st.session_state.poll_count} 次轮询)")
+
+        try:
+            status_res = requests.get(f"{API_BASE_URL}/cases/status/{task_id}")
+            if status_res.status_code == 200:
+                status_info = status_res.json()
+                current_status = status_info.get("status")
+
+                if current_status == "success":
+                    # ✅ 任务完成，保存报告，销毁排队小票
+                    st.session_state.current_report = status_info.get("data", {})
+                    st.session_state.current_task_id = None
+                    st.success("✅ 判决书已生成！")
+                    time.sleep(1)
+                    st.rerun()  # 最后重载一次，展示报告
+
+                elif current_status == "error":
+                    # ❌ 任务报错，销毁排队小票
+                    error_msg = status_info.get("message", "后台执行发生未知错误")
+                    st.error(f"❌ 专案组执行失败: {error_msg}")
+                    st.session_state.current_task_id = None
+
+                else:
+                    # ⏳ 还在处理中，让页面睡 2 秒后强制自我重载 (实现非 while 轮询)
+                    time.sleep(2)
+                    if st.session_state.poll_count < 60:
+                        st.rerun()
+                    else:
+                        st.error("⏳ AI 思考时间过长，已超时。")
+                        st.session_state.current_task_id = None
+        except Exception as e:
+            st.error(f"查询进度失败: {e}")
+            time.sleep(2)
+            st.rerun()  # 遇到网络波动，重试
+
+    # ==========================================
+    # 渲染层：只要有报告且当前不在排队中，就展示
+    # ==========================================
+    if st.session_state.current_report and not st.session_state.current_task_id:
         result = st.session_state.current_report
         suspect_id = st.session_state.current_suspect
         graph_data = st.session_state.current_graph
@@ -100,9 +135,9 @@ def render_investigation_panel():
         else:
             st.success(f"**安全 (LOW)** | 危险指数: {risk_score}/100")
 
-        # 渲染图谱
+        # 渲染动态资金图谱
         render_money_network(account_id=suspect_id, raw_graph_data=graph_data)
 
-        # 渲染报告
+        # 渲染最终 SAR 报告
         with st.expander("📄 查看《反洗钱可疑交易结案报告》", expanded=True):
             st.markdown(result.get("report", "报告生成失败。"))
