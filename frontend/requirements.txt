@@ -1,0 +1,13 @@
+# frontend/requirements.txt
+
+# 核心框架
+streamlit>=1.30.0
+
+# 数据处理与展示
+pandas>=2.0.0
+
+# HTTP 请求 (与后端通信)
+requests>=2.31.0
+
+# 我们下一步要用的图谱可视化神器
+streamlit-agraph

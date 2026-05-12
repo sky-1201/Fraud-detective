@@ -1,4 +1,4 @@
-# backend/requirements.txt
+# backend/requirements.txt.txt
 
 # ==========================================
 # 🚀 核心 Web 框架层 (FastAPI 生态)

@@ -1,4 +1,5 @@
 # backend/app/main.py
+# neo4j数据库可视化：http://localhost:7474/
 from fastapi import FastAPI
 from backend.app.api.endpoints import scan,cases
 from backend.app.core.config import settings
